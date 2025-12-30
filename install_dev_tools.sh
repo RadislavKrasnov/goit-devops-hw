@@ -63,7 +63,6 @@ install_docker() {
 }
 
 install_docker_compose() {
-    # Compose plugin check (modern): "docker compose"
     if docker compose version >/dev/null 2>&1; then
         echo "Docker Compose already installed. Skipping."
         return
@@ -91,7 +90,6 @@ EOF
 }
 
 install_django() {
-    # Install Django via pip in a venv to avoid PEP 668 restrictions
     VENV_DIR="$HOME/django_venv"
 
     if [ -x "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -m django --version >/dev/null 2>&1; then
