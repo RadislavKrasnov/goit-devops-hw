@@ -74,4 +74,5 @@ deactivate
 * Django is installed in a virtual environment to avoid conflicts with system-managed Python packages.
 * After running verification commands you should see the results similar to showed on the screenshot.
 
+![Alt text](./verification-results.png)
 
