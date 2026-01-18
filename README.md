@@ -215,7 +215,8 @@ helm upgrade --install my-django charts/django-app \
 ### Environment Variables Management
 ConfigMap
 - Stores non-sensitive environment variables
-- Committed to Git
+- Committed to Git   
+
 Secret
 - Stores sensitive variables (e.g. database password)
 - Defined in values.secret.yaml
