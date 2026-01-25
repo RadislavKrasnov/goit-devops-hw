@@ -1,264 +1,324 @@
-# Lesson-7 — Kubernetes, Helm & Autoscaling with Terraform (AWS)
+# Lesson 8–9 — Full CI/CD with Jenkins, Terraform, Helm & Argo CD (AWS EKS)
 
 ## Overview
 
-This project follows Infrastructure as Code (IaC) using **Terraform** on **AWS**.  
-This is a modular Terraform structure that provisions:
+This project demonstrates a **full CI/CD pipeline** using modern **DevOps** and **GitOps** practices.
 
-- Remote Terraform state storage in **S3** with state locking via **DynamoDB**
-- Network infrastructure using **VPC** with public and private subnets
-- **NAT Gateway** for outbound internet access from private subnets
-- **ECR (Elastic Container Registry)** for storing Docker images
-- **AWS EKS** for Kubernetes cluster provisioning
+The solution combines:
+
+- **Terraform** — Infrastructure as Code (AWS)
+- **Amazon EKS** — Kubernetes cluster
+- **Amazon ECR** — Docker image registry
+- **Helm** — Kubernetes package management
+- **Jenkins** — Continuous Integration (CI)
+- **Argo CD** — GitOps-based Continuous Deployment (CD)
+
+The pipeline works **without manual deployment steps**:
+
+- Code change → Jenkins builds Docker image
+- Image is pushed to Amazon ECR
+- Helm chart is updated in Git
+- Argo CD detects Git change and deploys automatically
 
 ---
 
-## Project Structure
+## High-Level CI/CD Architecture
+```
+Developer
+    |
+    | git push (application code)
+    v
+GitHub (Repo 1: infra + app)
+    |
+    | Jenkinsfile
+    v
+Jenkins (Kubernetes Agent)
+    | 
+    | • Build Docker image
+    | • Push to ECR
+    | • Update Helm values.yaml
+    v
+GitHub (Repo 2: Helm charts)
+    |
+    | GitOps
+    v
+Argo CD
+    |
+    | Auto-sync
+    v
+Kubernetes (EKS)
+```
 
-lesson-7/  
-│  
-├── main.tf                  # Root Terraform module  
-├── backend.tf               # Remote state (S3 + DynamoDB)  
-├── providers.tf             # Providers configuration  
-├── outputs.tf               # Global outputs  
-├── terraform.lock.hcl       # Provider lock file  
-├── Dockerfile               # Django application Dockerfile  
-├── README.md                # Documentation  
-│  
-├── modules/    
-│   ├── s3-backend/          # Remote Terraform backend  
-│   ├── vpc/                 # Networking (VPC, subnets, NAT)  
-│   ├── ecr/                 # ECR repository  
-│   └── eks/                 # Kubernetes (EKS) cluster  
-│  
-├── charts/  
-│   └── django-app/  
-│       ├── Chart.yaml  
-│       ├── values.yaml              # Non-secret configuration  
-│       ├── values.secret.yaml       # NOT committed (gitignored)  
-│       └── templates/  
-│           ├── deployment.yaml  
-│           ├── service.yaml  
-│           ├── configmap.yaml  
-│           ├── secret.yaml  
-│           └── hpa.yaml  
-│  
-└── app/                     # Django application source code  
-  
+---
+
+## Jenkins Kubernetes Agent  
+
+Kubernetes Agent definition  in Jenkins UI (Manage Jenkins → Clouds → New cloud):  
+
+Cloud configuration (cluster URL, credentials, namespace)  
+→ Defined manually in Jenkins  
+
+---
+
+## Repositories
+
+### Repo 1 — Infrastructure & Application
+
+[Repo link](https://github.com/RadislavKrasnov/goit-devops-hw/tree/lesson-8-9)  
+
+Contains:
+- Terraform root and modules
+- Jenkinsfile
+- Dockerfile
+- Django application source code
+
+### Repo 2 — Helm Charts (GitOps)
+
+[Repo link](https://github.com/RadislavKrasnov/goit-devops-charts/tree/master)
+
+Contains:
+- Helm chart for Django application only
+- Watched by Argo CD
+
+**Important:**  
+Dockerfile and application code are **NOT stored** in Repo 2.
+
+---
+
+## Project Structure (Repo 1)
+```
+lesson-8-9/  
+├── main.tf  
+├── backend.tf  
+├── providers.tf  
+├── outputs.tf  
+├── variables.tf  
+├── Jenkinsfile  
+├── Dockerfile  
+├── app/ # Django application  
+├── modules/  
+│ ├── s3-backend/  
+│ ├── vpc/  
+│ ├── ecr/  
+│ ├── eks/  
+│ ├── jenkins/  
+│ └── argo_cd/  
+└── README.md  
+```
+
+---
+
+## Project Structure (Repo 2)
+
+```
+charts/  
+└── django-app/  
+    ├── Chart.yaml  
+    ├── values.yaml  
+    └── templates/  
+        ├── deployment.yaml  
+        ├── service.yaml  
+        ├── configmap.yaml  
+        └── hpa.yaml  
+```
 ---
 
 ## Prerequisites
 
 - Terraform `>= 1.4`
-- Docker
 - AWS account
-- AWS CLI configured (`aws configure`)
+- AWS CLI (`aws configure`)
 - kubectl
 - Helm
-- IAM user with permissions for:
-  - S3
-  - DynamoDB
+- Docker (for local builds if needed)
+- IAM user with access to:
   - VPC
   - EC2
-  - ECR
   - EKS
+  - ECR
+  - S3
+  - DynamoDB
   - IAM
 
 ---
 
-## How to Run the Project
+## How to Use Terraform (Infrastructure Deployment)
 
-### 1 Initial setup (first run — without backend)
-
-Terraform backend **must not be enabled** until S3 and DynamoDB are created.
+### 1. Configure AWS CLI
 
 ```bash
-cd lesson-7
+aws configure
+aws sts get-caller-identity
+```
+
+### 2. Initial Terraform Run (local state)
+
+```bash
 terraform init
-terraform plan
 terraform apply
 ```
 
-This will create:
-- S3 bucket for Terraform state
-- DynamoDB table for state locking
-- VPC, subnets, Internet Gateway, NAT Gateway
-- ECR repository
-- EKS cluster with managed node group
+This creates:  
+- S3 bucket + DynamoDB for Terraform backend  
+- VPC with public/private subnets  
+- NAT Gateway  
+- ECR repository  
+- EKS cluster  
+- Jenkins (via Helm)  
+- Argo CD (via Helm)  
 
-### 2 Enable remote backend (S3)
-After resources are created, configure backend.tf:
+--- 
+
+### 3. Enable Remote Backend  
+
+Edit backend.tf:
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "your-unique-s3-bucket-name"
-    key            = "lesson-5/terraform.tfstate"
-    region         = "us-west-2"
+    bucket         = "<YOUR_BUCKET>"
+    key            = "lesson-8-9/terraform.tfstate"
+    region         = "us-east-1"
     dynamodb_table = "terraform-locks"
     encrypt        = true
   }
 }
 ```
 
-Reinitialize Terraform and migrate state:
+Then migrate state:
 
-```bash
+```hcl
 terraform init -reconfigure
 ```
 
-Confirm migration by typing yes.
-
-### 3 Common Terraform Commands
-```bash
-terraform plan     # Preview infrastructure changes
-terraform apply    # Apply changes
-terraform destroy  # Remove all infrastructure
-```
-
-## Terraform Modules
-### s3-backend module
-Responsible for remote Terraform state management.  
-
-Creates S3 bucket with:  
-- Versioning enabled  
-- Public access blocked  
-- DynamoDB table for Terraform state locking    
-
-Used to:  
-- Store terraform.tfstate securely  
-- Prevent concurrent state modification  
-
-### vpc module
-Creates full network infrastructure:  
-- VPC with custom CIDR block    
-- 3 public subnets  
-- 3 private subnets  
-- Internet Gateway (for public subnets)  
-- NAT Gateway (for private subnets)  
-- Route tables and associations  
-
-This setup allows:
-- Internet access for public resources
-- Secure outbound-only internet access for private resources
-
-### ecr module
-Creates an Amazon Elastic Container Registry:  
-- Private ECR repository  
-- Image scanning on push enabled  
-- Repository access policy  
-
-### eks module
-Create Kubernetes cluster in AWS EKS:
-- Managed Node Groups
-- Autoscaling
-- Networking
-
-Outputs:  
-- Repository URL for Docker image pushes
-
 ---
 
-### 2. Configure kubectl access to EKS
-Install Kubectl by using [official documentation](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+### 4. Configure kubectl access to EKS
 
 ```bash
 aws eks update-kubeconfig \
   --region us-east-1 \
-  --name lesson-7-eks
-
+  --name <EKS_CLUSTER_NAME>
 ```
+
 Verify:
 
 ```bash
 kubectl get nodes
 ```
 
-### 3. Docker Image Build & Push to ECR  
-1. Authenticate Docker to ECR  
+---
+
+### Jenkins (CI)   
+Access Jenkins UI
 
 ```bash
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin <ECR_REPOSITORY_URL>
-```
-
-2. Build and push Django image  
-
-```bash
-docker build -t django-app:latest .
-docker tag django-app:latest <ECR_REPOSITORY_URL>:latest
-docker push <ECR_REPOSITORY_URL>:latest
-```
-
-### 4. Helm Deployment  
-Install Helm by following [official documentation](https://helm.sh/docs/intro/install#from-apt-debianubuntu)   
-Install Metrics Server (required for HPA)  
-
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-```
-
-Verify
-
-```bash
-kubectl top nodes
-```
-
-### 5. Deploy Django application via Helm
-
-```bash
-helm upgrade --install my-django charts/django-app \
-  -f charts/django-app/values.yaml \
-  -f charts/django-app/values.secret.yaml
-```
-
-### Environment Variables Management
-ConfigMap
-- Stores non-sensitive environment variables
-- Committed to Git   
-
-Secret
-- Stores sensitive variables (e.g. database password)
-- Defined in values.secret.yaml
-- File is excluded via .gitignore
-
-Application loads configuration using:
-
-```yaml
-envFrom:
-  - configMapRef:
-      name: my-django-config
-  - secretRef:
-      name: my-django-secret
-
-```
-
-Verification
-Check Kubernetes resources
-
-```bash
-kubectl get pods
-kubectl get svc
-kubectl get hpa
-```
-
-Confirm env vars inside the container
-
-```bash
-kubectl exec -it <pod-name> -- printenv | grep POSTGRES
-```
-
-Access application
-
-```bash
-kubectl get svc my-django-django
+kubectl -n jenkins get svc
 ```
 
 Open the EXTERNAL-IP in browser.
 
-Autoscaling (HPA)  
+Get admin password:
 
 ```bash
-kubectl describe hpa my-django-django
+kubectl -n jenkins get secret jenkins \
+  -o jsonpath="{.data.jenkins-admin-password}" | base64 -d
 ```
 
+---
+
+### Jenkins Credentials
+
+Create the following credentials in Jenkins UI:
+
+1. GitHub credentials
+- Type: Username & Password
+- ID: github-token
+- Username: GitHub username
+- Password: GitHub Personal Access Token
+
+2. AWS credentials
+- Type: Username & Password
+- ID: aws-credentials
+- Username: AWS_ACCESS_KEY_ID
+- Password: AWS_SECRET_ACCESS_KEY
+
+---
+
+### Jenkins Pipeline Verification
+1. Create a Pipeline job
+2. Choose Pipeline script from SCM
+3. Point to Repo 1
+4. Script path: Jenkinsfile
+5. Click Build Now
+
+What Jenkins does:
+- Builds Docker image from Dockerfile
+- Pushes image to ECR
+- Updates values.yaml in Repo 2
+- Pushes commit to master
+
+---
+
+### Argo CD (CD)  
+Access Argo CD UI
+
+```bash
+kubectl -n argocd get svc argocd-server
+```
+
+Get admin password:  
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+```
+
+Login:
+- Username: admin
+- Password: value from command above
+
+---
+
+### Verify Deployment in Argo CD
+
+In Argo CD UI:
+- Application status: Synced
+- Health status: Healthy
+
+Argo CD automatically deploys when:
+- Jenkins updates Helm chart in Repo 2
+- Git changes are detected
+
+--- 
+
+### Database Secrets Management
+
+Secrets are NOT stored in Git.
+
+Create Kubernetes Secret manually:
+
+```bash
+kubectl -n default create secret generic django-db \
+  --from-literal=DB_PASSWORD='yourpassword'
+```
+
+The Helm chart references this secret using existingSecretName.
+
+---
+
+### Cleanup (IMPORTANT)
+
+To avoid AWS charges:
+
+```bash
+terraform destroy
+```
+
+Optional cleanup:
+
+```bash
+kubectl -n default delete secret django-db
+```
+
+Destroying S3/DynamoDB backend removes Terraform state.
