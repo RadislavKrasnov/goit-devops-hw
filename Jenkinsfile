@@ -39,7 +39,8 @@ spec:
 
     - name: kaniko
       image: gcr.io/kaniko-project/executor:v1.16.0-debug
-      command: ["sh", "-c", "sleep 99d"]
+      command: ["sh", "-c", "cat"]
+      tty: true
       volumeMounts:
         - name: workspace-volume
           mountPath: /home/jenkins/agent
