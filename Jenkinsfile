@@ -1,7 +1,8 @@
 pipeline {
   agent {
     kubernetes {
-      cloud 'Kubernetes'
+      cloud 'kubernetes'
+      defaultContainer 'jnlp'
 
       yaml """
 apiVersion: v1
@@ -20,6 +21,13 @@ spec:
       emptyDir: {}
 
   containers:
+    - name: jnlp
+      image: jenkins/inbound-agent:3309.v27b_9314fd1a_4-1
+      args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
+      volumeMounts:
+        - name: workspace-volume
+          mountPath: /home/jenkins/agent
+
     - name: awscli
       image: amazon/aws-cli:2.15.0
       command: ["sh", "-c", "sleep 99d"]
@@ -76,7 +84,6 @@ spec:
           ]) {
             sh '''
               set -e
-
               echo "Preparing ECR auth for Kaniko..."
 
               PASS="$(aws ecr get-login-password --region $AWS_REGION)"
@@ -104,7 +111,6 @@ EOF
         container('kaniko') {
           sh '''
             set -e
-
             echo "Building and pushing image with Kaniko..."
 
             /kaniko/executor \
@@ -131,11 +137,10 @@ EOF
           ]) {
             sh '''
               set -e
-
               echo "Cloning chart repository..."
+
               rm -rf chart-repo
               git clone https://$GIT_USERNAME:$GIT_PAT@$CHART_REPO_URL chart-repo
-
               cd chart-repo/$CHART_PATH
 
               echo "Updating values.yaml..."
@@ -146,7 +151,7 @@ EOF
               git config user.name "$COMMIT_NAME"
 
               git add values.yaml
-              git commit -m "Update image to $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" || echo "No changes to commit"
+              git commit -m "Update image to $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" || echo "No changes"
               git push origin main
 
               echo "Helm values updated successfully"
