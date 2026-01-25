@@ -1,12 +1,16 @@
 controller:
   serviceType: LoadBalancer
 
-controller:
+  installLatestPlugins: false
+  installLatestSpecifiedPlugins: true
+
   installPlugins:
     - kubernetes
     - workflow-aggregator
     - git
     - github
+    - credentials
+    - credentials-binding
 
   admin:
     username: admin
