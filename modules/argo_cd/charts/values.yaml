@@ -5,7 +5,7 @@ applications:
     source:
       repoURL: https://github.com/RadislavKrasnov/goit-devops-charts.git
       path: charts/django-app
-      targetRevision: main
+      targetRevision: master
       helm:
         valueFiles:
           - values.yaml
