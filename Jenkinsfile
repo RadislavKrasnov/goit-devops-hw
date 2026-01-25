@@ -1,8 +1,7 @@
 pipeline {
   agent {
     kubernetes {
-      // Explicit cloud name is optional, but safe
-      cloud 'kubernetes'
+      cloud 'Kubernetes'
 
       yaml """
 apiVersion: v1
