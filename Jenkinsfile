@@ -153,7 +153,7 @@ EOF
 
               git add values.yaml
               git commit -m "Update image to $ECR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" || echo "No changes"
-              git push origin main
+              git push origin master
 
               echo "Helm values updated successfully"
             '''
