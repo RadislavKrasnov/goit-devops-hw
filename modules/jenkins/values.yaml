@@ -1,0 +1,26 @@
+controller:
+  serviceType: LoadBalancer
+
+  installLatestPlugins: false
+  installLatestSpecifiedPlugins: true
+
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - github
+    - credentials
+    - credentials-binding
+
+  admin:
+    username: admin
+
+  JCasC:
+    enabled: false
+
+serviceAccount:
+  create: false
+  name: jenkins-sa
+
+persistence:
+  enabled: false
